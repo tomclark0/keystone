@@ -53,6 +53,56 @@ class S3ContribCore(test_v3.RestfulTestCase):
             expected_status=http.client.OK)
         self.assertValidProjectScopedTokenResponse(resp, self.user,
                                                    forbid_token_id=True)
+            self.credential['id'], self.credential
+        )
+        # Cert credential so that we can test when type != ec2
+        self.cert_blob, self.cert_cred = unit.new_cert_credential(
+            self.user['id'], self.project_id
+        )
+        PROVIDERS.credential_api.create_credential(
+            self.cert_cred['id'], self.cert_cred
+        )
+
+    def test_http_get_method_not_allowed(self):
+        resp = self.get(
+            '/s3tokens',
+            expected_status=http.client.METHOD_NOT_ALLOWED,
+            convert=False,
+        )
+        self.assertEqual(http.client.METHOD_NOT_ALLOWED, resp.status_code)
+
+    def _test_good_response(self, expected_status=http.client.OK, **kwargs):
+        sts = 'string to sign'  # opaque string from swift3
+        sig = hmac.new(
+            self.cred_blob['secret'].encode('ascii'),
+            sts.encode('ascii'),
+            hashlib.sha1,
+        ).digest()
+        resp = self.post(
+            '/s3tokens',
+            body={
+                'credentials': {
+                    'access': self.cred_blob['access'],
+                    'signature': base64.b64encode(sig).strip(),
+                    'token': base64.b64encode(sts.encode('ascii')).strip(),
+                }
+            },
+            expected_status=expected_status,
+            **kwargs,
+        )
+        if expected_status == http.client.OK:
+            self.assertValidProjectScopedTokenResponse(
+                resp, self.user, forbid_token_id=True
+            )
+        else:
+            self.assertValidErrorResponse(resp)
+
+    def test_good_response(self):
+        self._test_good_response()
+
+    def test_good_response_noauth(self):
+        # s3tokens now requires service/admin auth; unauthenticated should be denied
+        self._test_good_response(http.client.UNAUTHORIZED, noauth=True)
 
     def test_bad_request(self):
         self.post(

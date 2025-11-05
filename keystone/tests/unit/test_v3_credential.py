@@ -89,6 +89,24 @@ class CredentialBaseTestCase(test_v3.RestfulTestCase):
             '/ec2tokens',
             body={'ec2Credentials': sig_ref},
             expected_status=http.client.OK)
+        sig_ref = {
+            'access': access,
+            'signature': signature,
+            'host': 'foo',
+            'verb': 'GET',
+            'path': '/bar',
+            'params': params,
+        }
+        PROVIDERS.assignment_api.create_system_grant_for_user(
+            self.user_id, self.role_id
+        )
+        token = self.get_system_scoped_token()
+        r = self.post(
+            '/ec2tokens',
+            body={'ec2Credentials': sig_ref},
+            expected_status=http.client.OK,
+            token=token,
+        )
         self.assertValidTokenResponse(r)
         return r.result['token']
 
